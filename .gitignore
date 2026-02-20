@@ -15,3 +15,4 @@ security/
 tts-env/
 repos/
 package-lock.json
+crm/db/contacts.db
