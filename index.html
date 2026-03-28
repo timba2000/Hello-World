@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Token Consumption Estimator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242736;
+      --border: #2e3148;
+      --accent: #7c6af7;
+      --accent2: #56cfb2;
+      --text: #e8eaf0;
+      --muted: #8b90a8;
+      --danger: #f87171;
+      --warning: #fbbf24;
+      --success: #34d399;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header .logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    header h1 { font-size: 1.2rem; font-weight: 600; }
+    header p { font-size: 0.8rem; color: var(--muted); }
+
+    .main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .main { grid-template-columns: 1fr; padding: 1rem; }
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .panel-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.1rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+
+    input[type="number"], select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 0.55rem 0.75rem;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="number"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+
+    select option { background: var(--surface2); }
+
+    .use-cases {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .use-case-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .use-case-card:hover { border-color: var(--accent); }
+    .use-case-card.active {
+      border-color: var(--accent);
+      background: rgba(124, 106, 247, 0.12);
+    }
+
+    .use-case-card .uc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .uc-name { font-size: 0.87rem; font-weight: 500; }
+    .uc-tokens { font-size: 0.75rem; color: var(--muted); }
+    .uc-detail { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 1.25rem 0;
+    }
+
+    .section-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent2);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    /* Results */
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 600px) {
+      .results-grid { grid-template-columns: 1fr; }
+    }
+
+    .metric-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .metric-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .metric-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+    }
+
+    .metric-value.accent { color: var(--accent); }
+    .metric-value.green { color: var(--success); }
+    .metric-value.orange { color: var(--warning); }
+    .metric-value.red { color: var(--danger); }
+
+    .chart-wrap {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .chart-title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+
+    canvas { max-height: 240px; }
+
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .breakdown-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .breakdown-table td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid rgba(46, 49, 72, 0.5);
+    }
+
+    .breakdown-table tr:last-child td { border-bottom: none; }
+
+    .breakdown-table .model-name { font-weight: 500; }
+    .breakdown-table .cost { color: var(--success); font-weight: 600; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .badge-fast { background: rgba(52, 211, 153, 0.15); color: var(--success); }
+    .badge-balanced { background: rgba(124, 106, 247, 0.15); color: var(--accent); }
+    .badge-powerful { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+    .info-tip {
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      margin-top: 0.75rem;
+    }
+
+    .period-tabs {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .period-tab {
+      flex: 1;
+      padding: 0.45rem 0.5rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+
+    .period-tab:hover { border-color: var(--accent); color: var(--text); }
+
+    .period-tab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .custom-uc-fields {
+      display: none;
+      gap: 0.6rem;
+      flex-direction: column;
+    }
+
+    .custom-uc-fields.show { display: flex; }
+
+    .inline-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">&#9670;</div>
+  <div>
+    <h1>Token Consumption Estimator</h1>
+    <p>Estimate Claude API token usage for your organisation</p>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- LEFT: Config panel -->
+  <div>
+    <div class="panel">
+      <div class="panel-title">Organisation</div>
+
+      <div class="form-group">
+        <label>Number of users / seats</label>
+        <input type="number" id="numUsers" value="50" min="1" />
+      </div>
+
+      <div class="form-group">
+        <label>Active users per day (%)</label>
+        <input type="number" id="activePercent" value="70" min="1" max="100" />
+      </div>
+
+      <div class="form-group">
+        <label>Requests per active user per day</label>
+        <input type="number" id="reqPerUser" value="20" min="1" />
+      </div>
+
+      <div class="divider"></div>
+      <div class="panel-title">Estimation Period</div>
+
+      <div class="period-tabs" id="periodTabs">
+        <div class="period-tab" data-days="1">Day</div>
+        <div class="period-tab" data-days="7">Week</div>
+        <div class="period-tab active" data-days="30">Month</div>
+        <div class="period-tab" data-days="90">Quarter</div>
+        <div class="period-tab" data-days="365">Year</div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="panel-title">Use Case</div>
+
+      <div class="use-cases" id="useCases"></div>
+
+      <div class="custom-uc-fields" id="customFields">
+        <div class="section-label">&#9998; Custom token sizes</div>
+        <div class="inline-grid">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Avg input tokens</label>
+            <input type="number" id="customInput" value="1000" min="1" />
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Avg output tokens</label>
+            <input type="number" id="customOutput" value="500" min="1" />
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="panel-title">Model Mix</div>
+
+      <div id="modelMix"></div>
+
+      <div class="info-tip">
+        Percentages define the share of requests sent to each model. Must sum to 100%.
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results panel -->
+  <div>
+    <div class="panel" style="margin-bottom:1rem">
+      <div class="panel-title" id="resultsTitle">Estimated consumption — 30 days</div>
+
+      <div class="results-grid" id="metricsGrid"></div>
+    </div>
+
+    <div class="two-col">
+      <div class="chart-wrap">
+        <div class="chart-title">Token breakdown (input vs output)</div>
+        <canvas id="donutChart"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Daily token volume over period</div>
+        <canvas id="lineChart"></canvas>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:1rem">
+      <div class="panel-title">Cost estimate by model</div>
+      <table class="breakdown-table" id="modelTable"></table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+const USE_CASES = [
+  { id: 'chatbot',    name: 'Customer support chatbot', icon: '💬',
+    inputTokens: 450,  outputTokens: 250,
+    detail: 'Short dialogues, FAQ responses' },
+  { id: 'rag',        name: 'RAG / Knowledge search',    icon: '🔍',
+    inputTokens: 2200, outputTokens: 600,
+    detail: 'Document retrieval + synthesis' },
+  { id: 'summarise',  name: 'Document summarisation',    icon: '📄',
+    inputTokens: 3500, outputTokens: 500,
+    detail: 'Long documents, concise summaries' },
+  { id: 'codegen',    name: 'Code generation / review',  icon: '💻',
+    inputTokens: 1800, outputTokens: 1200,
+    detail: 'Feature code, PR reviews' },
+  { id: 'extraction', name: 'Data extraction / parsing', icon: '📊',
+    inputTokens: 4000, outputTokens: 300,
+    detail: 'Forms, invoices, structured data' },
+  { id: 'content',    name: 'Content writing',           icon: '✍️',
+    inputTokens: 350,  outputTokens: 1800,
+    detail: 'Blog posts, marketing copy' },
+  { id: 'agent',      name: 'Agentic workflows',         icon: '🤖',
+    inputTokens: 5000, outputTokens: 2000,
+    detail: 'Multi-step tool-using agents' },
+  { id: 'custom',     name: 'Custom',                    icon: '⚙️',
+    inputTokens: 1000, outputTokens: 500,
+    detail: 'Define your own token sizes' },
+];
+
+const MODELS = [
+  { id: 'haiku35',  name: 'Claude 3.5 Haiku',   badge: 'fast',      inputPer1M: 0.80,  outputPer1M: 4.00,  defaultPct: 40 },
+  { id: 'sonnet35', name: 'Claude 3.5 Sonnet',  badge: 'balanced',  inputPer1M: 3.00,  outputPer1M: 15.00, defaultPct: 45 },
+  { id: 'sonnet4',  name: 'Claude Sonnet 4',    badge: 'balanced',  inputPer1M: 3.00,  outputPer1M: 15.00, defaultPct: 0  },
+  { id: 'opus4',    name: 'Claude Opus 4',      badge: 'powerful',  inputPer1M: 15.00, outputPer1M: 75.00, defaultPct: 15 },
+];
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+let state = {
+  numUsers: 50,
+  activePercent: 70,
+  reqPerUser: 20,
+  periodDays: 30,
+  selectedUC: 'chatbot',
+  customInput: 1000,
+  customOutput: 500,
+  modelMix: Object.fromEntries(MODELS.map(m => [m.id, m.defaultPct])),
+};
+
+// ─── Charts ──────────────────────────────────────────────────────────────────
+
+let donutChart, lineChart;
+
+function initCharts() {
+  const donutCtx = document.getElementById('donutChart').getContext('2d');
+  donutChart = new Chart(donutCtx, {
+    type: 'doughnut',
+    data: { labels: ['Input tokens', 'Output tokens'], datasets: [{ data: [0, 0],
+      backgroundColor: ['rgba(124,106,247,0.85)', 'rgba(86,207,178,0.85)'],
+      borderColor: ['#7c6af7', '#56cfb2'], borderWidth: 2, hoverOffset: 6 }] },
+    options: {
+      cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8b90a8', font: { size: 11 }, padding: 14 } },
+        tooltip: { callbacks: { label: ctx => ` ${fmtM(ctx.raw)} tokens (${Math.round(ctx.raw / (ctx.dataset.data[0]+ctx.dataset.data[1])*100)}%)` } }
+      }
+    }
+  });
+
+  const lineCtx = document.getElementById('lineChart').getContext('2d');
+  lineChart = new Chart(lineCtx, {
+    type: 'line',
+    data: { labels: [], datasets: [
+      { label: 'Total tokens / day', data: [],
+        borderColor: '#7c6af7', backgroundColor: 'rgba(124,106,247,0.12)',
+        fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2 }
+    ]},
+    options: {
+      scales: {
+        x: { ticks: { color: '#8b90a8', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: 'rgba(46,49,72,0.5)' } },
+        y: { ticks: { color: '#8b90a8', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(46,49,72,0.5)' } }
+      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${fmtM(ctx.raw)} tokens` } } }
+    }
+  });
+}
+
+// ─── Render helpers ──────────────────────────────────────────────────────────
+
+function fmtNum(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return n.toFixed(0);
+}
+
+function fmtM(n) { return fmtNum(n); }
+
+function fmtCost(n) {
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(2) + 'K';
+  if (n >= 1)   return '$' + n.toFixed(2);
+  return '$' + n.toFixed(4);
+}
+
+// ─── Compute ─────────────────────────────────────────────────────────────────
+
+function compute() {
+  const { numUsers, activePercent, reqPerUser, periodDays, selectedUC, modelMix } = state;
+
+  const uc = USE_CASES.find(u => u.id === selectedUC);
+  const inputTok  = selectedUC === 'custom' ? state.customInput  : uc.inputTokens;
+  const outputTok = selectedUC === 'custom' ? state.customOutput : uc.outputTokens;
+
+  const activeUsers     = numUsers * (activePercent / 100);
+  const reqPerDay       = activeUsers * reqPerUser;
+  const totalRequests   = reqPerDay * periodDays;
+  const totalInputTok   = totalRequests * inputTok;
+  const totalOutputTok  = totalRequests * outputTok;
+  const totalTokens     = totalInputTok + totalOutputTok;
+
+  // Per model
+  const modelResults = MODELS.map(m => {
+    const pct      = (modelMix[m.id] || 0) / 100;
+    const mReqs    = totalRequests * pct;
+    const mIn      = totalInputTok * pct;
+    const mOut     = totalOutputTok * pct;
+    const mCost    = (mIn / 1e6) * m.inputPer1M + (mOut / 1e6) * m.outputPer1M;
+    return { ...m, pct, mReqs, mIn, mOut, mCost };
+  });
+
+  const totalCost = modelResults.reduce((s, m) => s + m.mCost, 0);
+
+  return { reqPerDay, totalRequests, totalInputTok, totalOutputTok, totalTokens, totalCost, modelResults, inputTok, outputTok };
+}
+
+// ─── Update UI ───────────────────────────────────────────────────────────────
+
+function periodLabel(days) {
+  const map = { 1: 'day', 7: 'week', 30: 'month', 90: 'quarter', 365: 'year' };
+  return map[days] || `${days} days`;
+}
+
+function update() {
+  const r = compute();
+
+  // Title
+  document.getElementById('resultsTitle').textContent =
+    `Estimated consumption — ${state.periodDays} ${periodLabel(state.periodDays)}${state.periodDays > 1 ? 's' : ''}`;
+
+  // Metrics
+  const metrics = [
+    { label: 'Total tokens',    value: fmtNum(r.totalTokens),    sub: `${fmtNum(r.totalInputTok)} in + ${fmtNum(r.totalOutputTok)} out`, cls: 'accent' },
+    { label: 'Total requests',  value: fmtNum(r.totalRequests),  sub: `${fmtNum(r.reqPerDay)} requests / day`,                            cls: 'green'  },
+    { label: 'Estimated cost',  value: fmtCost(r.totalCost),     sub: `${fmtCost(r.totalCost/state.periodDays)} / day avg`,              cls: 'orange' },
+    { label: 'Avg tokens / req',value: fmtNum(r.inputTok + r.outputTok), sub: `${fmtNum(r.inputTok)} in + ${fmtNum(r.outputTok)} out`,   cls: 'accent' },
+  ];
+
+  document.getElementById('metricsGrid').innerHTML = metrics.map(m =>
+    `<div class="metric-card">
+       <div class="metric-label">${m.label}</div>
+       <div class="metric-value ${m.cls}">${m.value}</div>
+       <div class="metric-sub">${m.sub}</div>
+     </div>`
+  ).join('');
+
+  // Donut
+  donutChart.data.datasets[0].data = [r.totalInputTok, r.totalOutputTok];
+  donutChart.update();
+
+  // Line chart
+  const days = state.periodDays;
+  const labels = [];
+  const data   = [];
+  const step   = days <= 7 ? 1 : days <= 30 ? 1 : days <= 90 ? 3 : 7;
+  for (let d = 1; d <= days; d += step) {
+    labels.push(days === 1 ? `Hour ${Math.min(d, 24)}` : `Day ${d}`);
+    data.push(r.totalTokens / days);
+  }
+  lineChart.data.labels = labels;
+  lineChart.data.datasets[0].data = data;
+  lineChart.update();
+
+  // Model table
+  const badgeMap = { fast: 'badge-fast', balanced: 'badge-balanced', powerful: 'badge-powerful' };
+  const tableHTML = `
+    <thead>
+      <tr>
+        <th>Model</th><th>Share</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${r.modelResults.map(m => `
+        <tr>
+          <td><span class="model-name">${m.name}</span> <span class="badge ${badgeMap[m.badge]}">${m.badge}</span></td>
+          <td>${m.pct ? Math.round(m.pct*100)+'%' : '—'}</td>
+          <td>${fmtNum(m.mReqs)}</td>
+          <td>${fmtNum(m.mIn)}</td>
+          <td>${fmtNum(m.mOut)}</td>
+          <td class="cost">${m.mCost > 0 ? fmtCost(m.mCost) : '—'}</td>
+        </tr>`).join('')}
+      <tr style="border-top: 1px solid var(--border); font-weight:600">
+        <td colspan="5" style="text-align:right; color:var(--muted)">Total estimated cost</td>
+        <td class="cost">${fmtCost(r.totalCost)}</td>
+      </tr>
+    </tbody>`;
+  document.getElementById('modelTable').innerHTML = tableHTML;
+}
+
+// ─── Render static UI ────────────────────────────────────────────────────────
+
+function renderUseCases() {
+  const container = document.getElementById('useCases');
+  container.innerHTML = USE_CASES.map(uc => `
+    <div class="use-case-card ${uc.id === state.selectedUC ? 'active' : ''}" data-id="${uc.id}">
+      <div class="uc-header">
+        <span class="uc-name">${uc.icon} ${uc.name}</span>
+        <span class="uc-tokens">${fmtNum(uc.inputTokens + uc.outputTokens)} tok/req</span>
+      </div>
+      <div class="uc-detail">${uc.detail}</div>
+    </div>`).join('');
+
+  container.querySelectorAll('.use-case-card').forEach(el => {
+    el.addEventListener('click', () => {
+      state.selectedUC = el.dataset.id;
+      renderUseCases();
+      const cf = document.getElementById('customFields');
+      cf.classList.toggle('show', state.selectedUC === 'custom');
+      update();
+    });
+  });
+}
+
+function renderModelMix() {
+  const container = document.getElementById('modelMix');
+  container.innerHTML = MODELS.map(m => `
+    <div class="form-group">
+      <label>${m.name} <span class="badge ${m.badge === 'fast' ? 'badge-fast' : m.badge === 'balanced' ? 'badge-balanced' : 'badge-powerful'}">${m.badge}</span>
+        <span style="float:right;color:var(--muted)">$${m.inputPer1M}/$${m.outputPer1M} per MTok</span>
+      </label>
+      <input type="number" id="mix_${m.id}" value="${state.modelMix[m.id]}" min="0" max="100"
+             style="border-color: ${state.modelMix[m.id] > 0 ? 'var(--accent)' : 'var(--border)'}" />
+    </div>`).join('');
+
+  MODELS.forEach(m => {
+    document.getElementById(`mix_${m.id}`).addEventListener('input', e => {
+      state.modelMix[m.id] = parseFloat(e.target.value) || 0;
+      normaliseMix(m.id);
+      renderModelMix();
+      update();
+    });
+  });
+}
+
+function normaliseMix(changedId) {
+  // Keep changed model, adjust others proportionally so sum = 100
+  const total = Object.values(state.modelMix).reduce((s, v) => s + v, 0);
+  if (total === 100) return;
+  // Fine — we just show as-is (don't force normalisation so user can type freely)
+}
+
+// ─── Wire inputs ─────────────────────────────────────────────────────────────
+
+function wireInputs() {
+  ['numUsers','activePercent','reqPerUser'].forEach(id => {
+    document.getElementById(id).addEventListener('input', e => {
+      state[id] = parseFloat(e.target.value) || 0;
+      update();
+    });
+  });
+
+  ['customInput','customOutput'].forEach(id => {
+    document.getElementById(id).addEventListener('input', e => {
+      state[id] = parseFloat(e.target.value) || 0;
+      update();
+    });
+  });
+
+  document.getElementById('periodTabs').querySelectorAll('.period-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      state.periodDays = parseInt(tab.dataset.days);
+      document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      update();
+    });
+  });
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+
+window.addEventListener('DOMContentLoaded', () => {
+  initCharts();
+  renderUseCases();
+  renderModelMix();
+  wireInputs();
+  update();
+});
+</script>
+</body>
+</html>
